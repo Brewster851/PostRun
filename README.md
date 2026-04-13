@@ -1,4 +1,4 @@
-# runlog.gg
+# postrun.gg
 
 A tactical board for breaking down Marathon runs with your squad.
 
