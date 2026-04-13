@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAC BOARD // MARATHON</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="alternate icon" type="image/x-icon" href="favicon.ico">
+<script src="jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0d0e;
+    --panel: #14171a;
+    --panel-2: #1c2024;
+    --line: #2a2f35;
+    --ink: #e8ebee;
+    --dim: #7a838d;
+    --accent: #ff7a1a;
+    --accent-dim: #a04a0e;
+    --red: #ef4444;
+    --green: #22c55e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 13px;
+    overflow: hidden;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 240px 1fr 260px;
+    grid-template-rows: 48px 1fr 56px;
+    grid-template-areas:
+      "header header header"
+      "left   canvas right"
+      "left   timeline right";
+    height: 100vh;
+    gap: 1px;
+    background: var(--line);
+  }
+  header {
+    grid-area: header;
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+  }
+  header .logo {
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    font-size: 13px;
+  }
+  header .logo::before { content: "▲ "; color: var(--accent); }
+  header .divider { width: 1px; height: 20px; background: var(--line); }
+  header .run-name {
+    background: transparent; border: none;
+    color: var(--ink); font-family: inherit; font-size: 13px;
+    padding: 4px 8px; width: 280px;
+    border-bottom: 1px solid transparent;
+  }
+  header .run-name:focus { outline: none; border-bottom-color: var(--accent); }
+  header .map-select {
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink); font-family: inherit; font-size: 12px;
+    padding: 4px 8px; cursor: pointer;
+  }
+  header .spacer { flex: 1; }
+  header button {
+    background: transparent; border: 1px solid var(--line);
+    color: var(--dim); font-family: inherit; font-size: 11px;
+    letter-spacing: 0.1em; padding: 6px 12px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  header button:hover { color: var(--ink); border-color: var(--dim); }
+  header button.primary { color: var(--accent); border-color: var(--accent-dim); }
+  header button.primary:hover { background: var(--accent-dim); color: var(--ink); }
+
+  aside.left, aside.right {
+    background: var(--panel);
+    overflow-y: auto;
+    padding: 12px;
+  }
+  aside.left { grid-area: left; }
+  aside.right { grid-area: right; }
+
+  .section-title {
+    font-size: 10px; letter-spacing: 0.2em;
+    color: var(--dim); margin: 14px 0 8px;
+    padding-bottom: 4px; border-bottom: 1px solid var(--line);
+  }
+  .section-title:first-child { margin-top: 0; }
+
+  .tool-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  .tool-btn {
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink); padding: 8px 6px;
+    font-family: inherit; font-size: 10px; letter-spacing: 0.08em;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all 0.1s;
+  }
+  .tool-btn:hover { border-color: var(--dim); }
+  .tool-btn.active {
+    border-color: var(--accent); color: var(--accent);
+    background: rgba(255, 122, 26, 0.08);
+  }
+  .tool-btn .icon {
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-variant-emoji: text;
+  }
+
+  .stamp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .stamp-btn {
+    aspect-ratio: 1;
+    background: var(--panel-2); border: 1px solid var(--line);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--ink);
+    transition: all 0.1s; position: relative;
+    font-variant-emoji: text;
+  }
+  .stamp-btn:hover { border-color: var(--dim); }
+  .stamp-btn.active { border-color: var(--accent); background: rgba(255, 122, 26, 0.12); }
+  .stamp-btn .tag {
+    position: absolute; bottom: 2px; right: 3px;
+    font-size: 7px; color: var(--dim); letter-spacing: 0.05em;
+  }
+
+  .color-row { display: flex; gap: 4px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 24px; height: 24px;
+    border: 2px solid transparent; cursor: pointer;
+    border-radius: 2px;
+  }
+  .color-swatch.active { border-color: var(--ink); }
+
+  .stroke-row { display: flex; gap: 4px; }
+  .stroke-btn {
+    flex: 1;
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--ink); padding: 6px; cursor: pointer;
+    display: flex; justify-content: center; align-items: center;
+  }
+  .stroke-btn.active { border-color: var(--accent); }
+  .stroke-btn .bar { background: var(--ink); border-radius: 2px; }
+
+  main.canvas-wrap {
+    grid-area: canvas;
+    background: #06070a;
+    position: relative;
+    overflow: hidden;
+  }
+  #viewport {
+    position: absolute; inset: 0;
+    overflow: hidden;
+    cursor: crosshair;
+  }
+  #viewport.panning { cursor: grabbing; }
+  #viewport.pan-mode { cursor: grab; }
+  #viewport canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  #bgCanvas { z-index: 1; }
+  #drawCanvas { z-index: 2; }
+
+  .empty-prompt {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--dim);
+    text-align: center; letter-spacing: 0.15em;
+    font-size: 11px; pointer-events: none;
+    z-index: 10;
+  }
+  .empty-prompt strong {
+    display: block; color: var(--accent);
+    font-size: 14px; margin-bottom: 8px;
+    letter-spacing: 0.3em;
+  }
+
+  .zoom-hud {
+    position: absolute;
+    bottom: 12px; right: 12px;
+    display: flex; gap: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    z-index: 20;
+  }
+  .zoom-hud button {
+    background: transparent; border: none;
+    color: var(--ink); width: 36px; height: 32px;
+    cursor: pointer; font-family: inherit; font-size: 14px;
+    transition: all 0.1s;
+  }
+  .zoom-hud button:hover { background: var(--panel-2); color: var(--accent); }
+  .zoom-hud .zoom-level {
+    min-width: 60px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--dim); font-size: 11px; letter-spacing: 0.1em;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    padding: 0 6px;
+  }
+
+  footer.timeline {
+    grid-area: timeline;
+    background: var(--panel);
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 8px;
+    overflow-x: auto;
+  }
+  .frame-chip {
+    flex-shrink: 0;
+    width: 44px; height: 40px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--dim); font-size: 11px; letter-spacing: 0.1em;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: inherit; transition: all 0.1s;
+  }
+  .frame-chip .num { font-weight: 700; color: var(--ink); }
+  .frame-chip .lbl { font-size: 8px; color: var(--dim); }
+  .frame-chip:hover { border-color: var(--dim); }
+  .frame-chip.active { border-color: var(--accent); background: rgba(255,122,26,0.1); }
+  .frame-chip.active .num { color: var(--accent); }
+  .frame-add {
+    flex-shrink: 0;
+    width: 44px; height: 40px;
+    background: transparent; border: 1px dashed var(--line);
+    color: var(--dim); cursor: pointer;
+    font-size: 18px; font-family: inherit;
+  }
+  .frame-add:hover { border-color: var(--accent); color: var(--accent); }
+  .timeline-label {
+    font-size: 10px; letter-spacing: 0.2em;
+    color: var(--dim); margin-right: 8px;
+  }
+
+  .run-item {
+    background: var(--panel-2); border: 1px solid var(--line);
+    padding: 8px; margin-bottom: 4px;
+    cursor: pointer; font-size: 11px;
+  }
+  .run-item:hover { border-color: var(--dim); }
+  .run-item .rn { color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+  .run-item .rm { color: var(--dim); font-size: 10px; letter-spacing: 0.1em; }
+  .run-item .rd { color: var(--dim); font-size: 9px; margin-top: 2px; }
+  .run-item-actions { display: flex; gap: 4px; margin-top: 4px; }
+  .run-item-actions button {
+    flex: 1;
+    background: transparent; border: 1px solid var(--line);
+    color: var(--dim); font-family: inherit; font-size: 9px;
+    padding: 3px; letter-spacing: 0.1em; cursor: pointer;
+  }
+  .run-item-actions button:hover { color: var(--ink); }
+  .run-item-actions button.del:hover { color: var(--red); border-color: var(--red); }
+
+  .file-input-label {
+    display: block;
+    background: var(--panel-2); border: 1px dashed var(--line);
+    color: var(--dim); padding: 10px;
+    text-align: center; font-size: 10px; letter-spacing: 0.15em;
+    cursor: pointer; transition: all 0.1s;
+  }
+  .file-input-label:hover { border-color: var(--accent); color: var(--accent); }
+  .file-input-label input { display: none; }
+
+  .meta-row {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--dim);
+    padding: 4px 0; letter-spacing: 0.08em;
+  }
+  .meta-row span.val { color: var(--ink); }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--panel); }
+  ::-webkit-scrollbar-thumb { background: var(--line); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .hint {
+    font-size: 9px; color: var(--dim);
+    letter-spacing: 0.1em; line-height: 1.5;
+    padding: 6px 0;
+  }
+
+  .disclaimer {
+    position: absolute;
+    bottom: 62px;
+    left: 248px;
+    right: 268px;
+    z-index: 5;
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    text-align: center;
+    opacity: 0.55;
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">TAC BOARD</div>
+    <div class="divider"></div>
+    <input class="run-name" id="runName" placeholder="UNTITLED RUN" value="">
+    <select class="map-select" id="mapSelect">
+      <option value="perimeter">PERIMETER</option>
+      <option value="dire_marsh">DIRE MARSH</option>
+      <option value="outpost">OUTPOST</option>
+      <option value="cryo_archive">CRYO ARCHIVE</option>
+      <option value="custom">CUSTOM</option>
+    </select>
+    <div class="spacer"></div>
+    <span class="hint"><span class="status-dot"></span>LOCAL // <span id="statusText">READY</span></span>
+    <button id="btnNew">NEW</button>
+    <button id="btnSave">SAVE</button>
+    <button id="btnExport" class="primary">EXPORT PNG</button>
+    <button id="btnExportAll" class="primary">EXPORT ALL</button>
+  </header>
+
+  <aside class="left">
+    <div class="section-title">TOOL</div>
+    <div class="tool-grid">
+      <button class="tool-btn active" data-tool="select"><div class="icon">⬚</div>SELECT</button>
+      <button class="tool-btn" data-tool="pan"><div class="icon">✥</div>PAN</button>
+      <button class="tool-btn" data-tool="draw"><div class="icon">✎</div>DRAW</button>
+      <button class="tool-btn" data-tool="arrow"><div class="icon">↗</div>ARROW</button>
+      <button class="tool-btn" data-tool="line"><div class="icon">/</div>LINE</button>
+      <button class="tool-btn" data-tool="stamp"><div class="icon">◉</div>STAMP</button>
+      <button class="tool-btn" data-tool="text"><div class="icon">T</div>TEXT</button>
+      <button class="tool-btn" data-tool="erase"><div class="icon">⌫</div>ERASE</button>
+      <button class="tool-btn" data-tool="clear"><div class="icon">✕</div>CLEAR</button>
+    </div>
+
+    <div class="section-title">COLOR</div>
+    <div class="color-row" id="colorRow">
+      <div class="color-swatch active" style="background:#ff7a1a" data-color="#ff7a1a"></div>
+      <div class="color-swatch" style="background:#ef4444" data-color="#ef4444"></div>
+      <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6"></div>
+      <div class="color-swatch" style="background:#22c55e" data-color="#22c55e"></div>
+      <div class="color-swatch" style="background:#eab308" data-color="#eab308"></div>
+      <div class="color-swatch" style="background:#a855f7" data-color="#a855f7"></div>
+      <div class="color-swatch" style="background:#06b6d4" data-color="#06b6d4"></div>
+      <div class="color-swatch" style="background:#e8ebee" data-color="#e8ebee"></div>
+    </div>
+
+    <div class="section-title">STROKE</div>
+    <div class="stroke-row" id="strokeRow">
+      <button class="stroke-btn" data-width="2"><div class="bar" style="width:14px;height:2px"></div></button>
+      <button class="stroke-btn active" data-width="4"><div class="bar" style="width:14px;height:4px"></div></button>
+      <button class="stroke-btn" data-width="7"><div class="bar" style="width:14px;height:7px"></div></button>
+      <button class="stroke-btn" data-width="11"><div class="bar" style="width:14px;height:11px"></div></button>
+    </div>
+
+    <div class="section-title">SIZE</div>
+    <div class="hint">For new stamps and strokes</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+      <input type="range" id="stampSize" min="0.1" max="3" step="0.1" value="0.5"
+        style="flex:1;accent-color:var(--accent);">
+      <span id="stampSizeVal" style="font-size:10px;color:var(--ink);min-width:36px;text-align:right;">0.5×</span>
+    </div>
+
+    <div class="section-title">STAMPS</div>
+    <div class="hint">Pick a stamp, then click the map.</div>
+    <div class="stamp-grid" id="stampGrid">
+      <button class="stamp-btn" data-stamp="runner1">①<span class="tag">ALLY</span></button>
+      <button class="stamp-btn" data-stamp="runner2">②<span class="tag">ALLY</span></button>
+      <button class="stamp-btn" data-stamp="runner3">③<span class="tag">ALLY</span></button>
+      <button class="stamp-btn" data-stamp="me">◉<span class="tag">ME</span></button>
+      <button class="stamp-btn" data-stamp="enemyA">A<span class="tag">ENMY</span></button>
+      <button class="stamp-btn" data-stamp="enemyB">B<span class="tag">ENMY</span></button>
+      <button class="stamp-btn" data-stamp="enemyC">C<span class="tag">ENMY</span></button>
+      <button class="stamp-btn" data-stamp="ai">✦<span class="tag">UESC</span></button>
+      <button class="stamp-btn" data-stamp="kill">✕<span class="tag">KILL</span></button>
+      <button class="stamp-btn" data-stamp="down">▼<span class="tag">DOWN</span></button>
+      <button class="stamp-btn" data-stamp="revive">+<span class="tag">REV</span></button>
+      <button class="stamp-btn" data-stamp="fight">⚔<span class="tag">FIGHT</span></button>
+      <button class="stamp-btn" data-stamp="loot">◆<span class="tag">LOOT</span></button>
+      <button class="stamp-btn" data-stamp="extract">▲<span class="tag">EXT</span></button>
+      <button class="stamp-btn" data-stamp="core">◈<span class="tag">CORE</span></button>
+      <button class="stamp-btn" data-stamp="poi">★<span class="tag">POI</span></button>
+    </div>
+
+    <div class="section-title">ACTIONS</div>
+    <div class="tool-grid">
+      <button class="tool-btn" id="btnUndo"><div class="icon">↶</div>UNDO</button>
+      <button class="tool-btn" id="btnRedo"><div class="icon">↷</div>REDO</button>
+    </div>
+
+    <div id="selPanel" style="display:none;">
+      <div class="section-title">SELECTED</div>
+      <div class="hint" id="selInfo">—</div>
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+        <span style="font-size:9px;color:var(--dim);letter-spacing:0.15em;">SIZE</span>
+        <input type="range" id="selSize" min="0.1" max="3" step="0.1" value="1"
+          style="flex:1;accent-color:var(--accent);">
+        <span id="selSizeVal" style="font-size:10px;color:var(--ink);min-width:28px;text-align:right;">1.0×</span>
+      </div>
+      <div class="hint" style="padding-top:0;">RECOLOR</div>
+      <div class="color-row" id="selColorRow">
+        <div class="color-swatch" style="background:#ff7a1a" data-color="#ff7a1a"></div>
+        <div class="color-swatch" style="background:#ef4444" data-color="#ef4444"></div>
+        <div class="color-swatch" style="background:#3b82f6" data-color="#3b82f6"></div>
+        <div class="color-swatch" style="background:#22c55e" data-color="#22c55e"></div>
+        <div class="color-swatch" style="background:#eab308" data-color="#eab308"></div>
+        <div class="color-swatch" style="background:#a855f7" data-color="#a855f7"></div>
+        <div class="color-swatch" style="background:#06b6d4" data-color="#06b6d4"></div>
+        <div class="color-swatch" style="background:#e8ebee" data-color="#e8ebee"></div>
+      </div>
+      <div class="tool-grid" style="margin-top:8px;">
+        <button class="tool-btn" id="btnDeleteSel"><div class="icon">🗑</div>DELETE</button>
+        <button class="tool-btn" id="btnDeselect"><div class="icon">✕</div>DESELECT</button>
+      </div>
+      <div class="hint" style="padding-top:8px;">TIP: Drag the outer handle<br>to resize, drag item to move.</div>
+    </div>
+
+    <div class="hint">SCROLL = ZOOM · SPACE+DRAG = PAN<br>0 = FIT · 1 = 100% · DEL = DELETE SELECTION</div>
+  </aside>
+
+  <main class="canvas-wrap">
+    <div id="viewport">
+      <canvas id="bgCanvas"></canvas>
+      <canvas id="drawCanvas"></canvas>
+      <div class="empty-prompt" id="emptyPrompt">
+        <strong>NO MAP LOADED</strong>
+        UPLOAD A SCREENSHOT FROM THE RIGHT PANEL<br>
+        OR START DRAWING ON THE GRID
+      </div>
+    </div>
+    <div class="zoom-hud">
+      <button id="btnZoomOut" title="Zoom out (-)">−</button>
+      <div class="zoom-level" id="zoomLevel">100%</div>
+      <button id="btnZoomIn" title="Zoom in (+)">+</button>
+      <button id="btnZoomFit" title="Fit to screen (0)">◱</button>
+      <button id="btnZoom100" title="100% (1)">1:1</button>
+    </div>
+    <div class="disclaimer">
+      Fan-made tool · Not affiliated with Bungie, Inc. · Marathon and related assets © Bungie
+    </div>
+  </main>
+
+  <aside class="right">
+    <div class="section-title">MAP BACKGROUND</div>
+    <label class="file-input-label">
+      UPLOAD SCREENSHOT
+      <input type="file" id="mapUpload" accept="image/*">
+    </label>
+    <div class="hint" id="mapInfo">No background loaded.</div>
+
+    <div class="section-title">RUN INFO</div>
+    <div class="meta-row"><span>FRAMES</span><span class="val" id="metaFrames">1</span></div>
+    <div class="meta-row"><span>CURRENT</span><span class="val" id="metaCurrent">T0</span></div>
+    <div class="meta-row"><span>MAP</span><span class="val" id="metaMap">PERIMETER</span></div>
+    <div class="meta-row"><span>CANVAS</span><span class="val" id="metaCanvas">1920×1080</span></div>
+
+    <div class="section-title">SAVED RUNS</div>
+    <div id="savedList"><div class="hint">No saved runs yet.</div></div>
+  </aside>
+
+  <footer class="timeline">
+    <span class="timeline-label">TIMELINE</span>
+    <div id="frameList" style="display:flex;gap:6px;"></div>
+    <button class="frame-add" id="btnAddFrame" title="Add frame">+</button>
+    <div style="flex:1"></div>
+    <button class="tool-btn" id="btnDupFrame" style="width:auto;padding:6px 10px;flex-direction:row;gap:6px;">
+      <div class="icon">⎘</div>DUPLICATE
+    </button>
+    <button class="tool-btn" id="btnDelFrame" style="width:auto;padding:6px 10px;flex-direction:row;gap:6px;">
+      <div class="icon">🗑</div>DELETE FRAME
+    </button>
+  </footer>
+
+</div>
+
+<script>
+(() => {
+  const BUILTIN_MAPS = {
+    perimeter: 'perimeter.png',
+    dire_marsh: 'dire_marsh.png',
+    outpost: 'outpost.png',
+    cryo_archive: 'cryo_archive.png',
+  };
+
+  const DEFAULT_W = 1920, DEFAULT_H = 1080;
+
+  const state = {
+    runName: '',
+    map: 'perimeter',
+    bgImage: null,
+    canvasW: DEFAULT_W,
+    canvasH: DEFAULT_H,
+    frames: [{ label: 'T0', strokes: [], stamps: [], texts: [] }],
+    currentFrame: 0,
+    tool: 'select',
+    color: '#ff7a1a',
+    strokeWidth: 4,
+    activeStamp: null,
+    stampSize: 0.5,      // multiplier for newly placed stamps
+    selection: null,     // { type: 'stamp'|'text'|'stroke', index: N } or { type: 'multi', ... }
+    marquee: null,       // { x1,y1,x2,y2 } during drag
+    dragging: null,      // { mode: 'move'|'resize', startX, startY, origSize }
+    history: [],
+    redoStack: [],
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    spaceDown: false,
+    panning: false,
+    panStart: null,
+  };
+
+  const el = (id) => document.getElementById(id);
+  const drawCanvas = el('drawCanvas');
+  const bgCanvas = el('bgCanvas');
+  const viewport = el('viewport');
+  const emptyPrompt = el('emptyPrompt');
+  const dctx = drawCanvas.getContext('2d');
+  const bctx = bgCanvas.getContext('2d');
+
+  // Cached Image object for the background — avoids reloading on every render
+  let bgImgObj = null;
+
+  function sizeCanvasesToViewport() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = viewport.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width));
+    const h = Math.max(1, Math.floor(rect.height));
+    for (const c of [bgCanvas, drawCanvas]) {
+      c.width = Math.floor(w * dpr);
+      c.height = Math.floor(h * dpr);
+      c.style.width = w + 'px';
+      c.style.height = h + 'px';
+    }
+  }
+
+  function viewTransform(ctx) {
+    // Maps world-space (canvas coordinates) -> screen-space at current zoom/pan, with DPR baked in
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(state.zoom * dpr, 0, 0, state.zoom * dpr, state.panX * dpr, state.panY * dpr);
+  }
+
+  function resizeCanvas(w, h) {
+    // "Canvas" here is the WORLD size — the logical document dimensions. Not the actual pixel canvas.
+    state.canvasW = w;
+    state.canvasH = h;
+    el('metaCanvas').textContent = `${w}×${h}`;
+  }
+
+  function renderBackground() {
+    const dpr = window.devicePixelRatio || 1;
+    // Clear in identity space
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.fillStyle = '#06070a';
+    bctx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+    viewTransform(bctx);
+
+    if (bgImgObj) {
+      bctx.drawImage(bgImgObj, 0, 0, state.canvasW, state.canvasH);
+      emptyPrompt.style.display = 'none';
+    } else {
+      // Fallback grid
+      bctx.fillStyle = '#0b0d0e';
+      bctx.fillRect(0, 0, state.canvasW, state.canvasH);
+      bctx.strokeStyle = 'rgba(255,122,26,0.05)';
+      bctx.lineWidth = 1 / state.zoom;
+      for (let x = 0; x < state.canvasW; x += 40) {
+        bctx.beginPath(); bctx.moveTo(x, 0); bctx.lineTo(x, state.canvasH); bctx.stroke();
+      }
+      for (let y = 0; y < state.canvasH; y += 40) {
+        bctx.beginPath(); bctx.moveTo(0, y); bctx.lineTo(state.canvasW, y); bctx.stroke();
+      }
+      emptyPrompt.style.display = 'block';
+    }
+
+    // Document border (subtle, so you can see the edges of the "paper")
+    bctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    bctx.lineWidth = 1 / state.zoom;
+    bctx.strokeRect(0, 0, state.canvasW, state.canvasH);
+  }
+
+  function renderDraw() {
+    dctx.setTransform(1, 0, 0, 1, 0, 0);
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    viewTransform(dctx);
+
+    const frame = state.frames[state.currentFrame];
+    if (!frame) return;
+
+    for (let si = 0; si < frame.strokes.length; si++) {
+      const s = frame.strokes[si];
+      const isSel = state.selection
+        && ((state.selection.type === 'stroke' && state.selection.index === si)
+          || (state.selection.type === 'multi' && state.selection.strokeIdxs?.includes(si)));
+      // Selection highlight: draw a fatter, semi-transparent orange under the stroke
+      if (isSel) {
+        dctx.save();
+        dctx.strokeStyle = 'rgba(255,122,26,0.45)';
+        dctx.lineWidth = s.width + Math.max(6, 8 / state.zoom);
+        dctx.lineCap = 'round';
+        dctx.lineJoin = 'round';
+        dctx.beginPath();
+        if (s.type === 'freehand') {
+          if (s.points.length >= 2) {
+            dctx.moveTo(s.points[0].x, s.points[0].y);
+            for (let i = 1; i < s.points.length; i++) dctx.lineTo(s.points[i].x, s.points[i].y);
+          }
+        } else {
+          dctx.moveTo(s.x1, s.y1);
+          dctx.lineTo(s.x2, s.y2);
+        }
+        dctx.stroke();
+        dctx.restore();
+      }
+      dctx.strokeStyle = s.color;
+      dctx.lineWidth = s.width;
+      dctx.lineCap = 'round';
+      dctx.lineJoin = 'round';
+      if (s.type === 'freehand') {
+        if (s.points.length < 2) continue;
+        dctx.beginPath();
+        dctx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) dctx.lineTo(s.points[i].x, s.points[i].y);
+        dctx.stroke();
+      } else if (s.type === 'line' || s.type === 'arrow') {
+        if (s.type === 'arrow') {
+          const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+          const headLen = Math.max(12, s.width * 3);
+          const cut = headLen * 0.85;
+          const endX = s.x2 - cut * Math.cos(angle);
+          const endY = s.y2 - cut * Math.sin(angle);
+          dctx.beginPath();
+          dctx.moveTo(s.x1, s.y1);
+          dctx.lineTo(endX, endY);
+          dctx.stroke();
+          drawArrowHead(dctx, s.x1, s.y1, s.x2, s.y2, s.width, s.color);
+        } else {
+          dctx.beginPath();
+          dctx.moveTo(s.x1, s.y1);
+          dctx.lineTo(s.x2, s.y2);
+          dctx.stroke();
+        }
+      }
+    }
+
+    for (let i = 0; i < frame.stamps.length; i++) {
+      const isSel = state.selection
+        && ((state.selection.type === 'stamp' && state.selection.index === i)
+          || (state.selection.type === 'multi' && state.selection.stampIdxs?.includes(i)));
+      drawStamp(dctx, frame.stamps[i], isSel);
+    }
+
+    for (let i = 0; i < frame.texts.length; i++) {
+      const t = frame.texts[i];
+      dctx.fillStyle = t.color;
+      dctx.font = `bold ${t.size}px 'JetBrains Mono', monospace`;
+      dctx.textBaseline = 'top';
+      dctx.fillText(t.text, t.x, t.y);
+      const isSel = state.selection
+        && ((state.selection.type === 'text' && state.selection.index === i)
+          || (state.selection.type === 'multi' && state.selection.textIdxs?.includes(i)));
+      if (isSel) {
+        const w = dctx.measureText(t.text).width;
+        dctx.save();
+        dctx.strokeStyle = '#ff7a1a';
+        dctx.lineWidth = 2 / state.zoom;
+        dctx.setLineDash([6 / state.zoom, 4 / state.zoom]);
+        dctx.strokeRect(t.x - 4, t.y - 4, w + 8, t.size + 8);
+        dctx.setLineDash([]);
+        dctx.restore();
+      }
+    }
+
+    if (state.marquee) {
+      dctx.save();
+      const { x1, y1, x2, y2 } = state.marquee;
+      dctx.strokeStyle = '#ff7a1a';
+      dctx.fillStyle = 'rgba(255,122,26,0.08)';
+      dctx.lineWidth = 1 / state.zoom;
+      dctx.setLineDash([5 / state.zoom, 3 / state.zoom]);
+      const x = Math.min(x1, x2), y = Math.min(y1, y2);
+      const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1);
+      dctx.fillRect(x, y, w, h);
+      dctx.strokeRect(x, y, w, h);
+      dctx.restore();
+    }
+  }
+
+  function drawArrowHead(ctx, x1, y1, x2, y2, w, color) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const len = Math.max(12, w * 3);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - len * Math.cos(angle - Math.PI / 7), y2 - len * Math.sin(angle - Math.PI / 7));
+    ctx.lineTo(x2 - len * Math.cos(angle + Math.PI / 7), y2 - len * Math.sin(angle + Math.PI / 7));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const STAMP_DEFS = {
+    runner1: { glyph: '1', bg: '#3b82f6', ring: '#60a5fa', label: 'A1' },
+    runner2: { glyph: '2', bg: '#3b82f6', ring: '#60a5fa', label: 'A2' },
+    runner3: { glyph: '3', bg: '#3b82f6', ring: '#60a5fa', label: 'A3' },
+    me:      { glyph: '★', bg: '#22c55e', ring: '#86efac', label: 'ME' },
+    enemyA:  { glyph: 'A', bg: '#ef4444', ring: '#fca5a5', label: 'E-A' },
+    enemyB:  { glyph: 'B', bg: '#a855f7', ring: '#d8b4fe', label: 'E-B' },
+    enemyC:  { glyph: 'C', bg: '#eab308', ring: '#fde68a', label: 'E-C' },
+    ai:      { glyph: '✦', bg: '#06b6d4', ring: '#67e8f9', label: 'UESC' },
+    kill:    { glyph: '✕', color: '#ef4444', label: 'KILL', plain: true },
+    down:    { glyph: '▼', color: '#fdba74', label: 'DOWN', plain: true },
+    revive:  { glyph: '+', color: '#22c55e', label: 'REV',  plain: true },
+    fight:   { glyph: '⚔', color: '#ff7a1a', label: 'FIGHT', plain: true },
+    loot:    { glyph: '◆', color: '#eab308', label: 'LOOT', plain: true },
+    extract: { glyph: '▲', color: '#22c55e', label: 'EXT',  plain: true },
+    core:    { glyph: '◈', color: '#06b6d4', label: 'CORE', plain: true },
+    poi:     { glyph: '★', color: '#e8ebee', label: 'POI',  plain: true },
+  };
+
+  function drawStamp(ctx, st, selected) {
+    const def = STAMP_DEFS[st.type];
+    if (!def) return;
+    const base = Math.max(state.canvasW, state.canvasH);
+    const sizeMul = st.size || 1.0;
+    const r = Math.max(14, Math.round(base * 0.014)) * sizeMul;
+
+    // Color override (stored on stamp) takes precedence
+    const color = st.color || def.color;
+    const ring  = st.color || def.ring;
+    const bg    = st.color || def.bg;
+
+    if (def.plain) {
+      const glyphSize = Math.round(r * 2);
+      ctx.font = `bold ${glyphSize}px 'JetBrains Mono', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = Math.max(3, Math.round(r * 0.22));
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.strokeText(def.glyph, st.x, st.y);
+      ctx.fillStyle = color;
+      ctx.fillText(def.glyph, st.x, st.y);
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+      if (selected) drawSelectionHandles(ctx, st.x, st.y, r * 1.3);
+      return;
+    }
+
+    ctx.fillStyle = ring;
+    ctx.beginPath();
+    ctx.arc(st.x, st.y, r + 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.arc(st.x, st.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.round(r * 1.1)}px 'JetBrains Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.glyph, st.x, st.y);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+    if (selected) drawSelectionHandles(ctx, st.x, st.y, r * 1.2);
+  }
+
+  // Bounding radius of a stamp — used for hit testing and resize handles
+  function stampRadius(st) {
+    const def = STAMP_DEFS[st.type];
+    const base = Math.max(state.canvasW, state.canvasH);
+    const r = Math.max(14, Math.round(base * 0.014)) * (st.size || 1.0);
+    return def && def.plain ? r * 1.3 : r * 1.2;
+  }
+
+  function drawSelectionHandles(ctx, cx, cy, radius) {
+    ctx.save();
+    const ringPad = Math.max(4, radius * 0.15);
+    const ringR = radius + ringPad;
+    ctx.strokeStyle = '#ff7a1a';
+    ctx.lineWidth = Math.max(1.5, 2 / state.zoom);
+    ctx.setLineDash([6 / state.zoom, 4 / state.zoom]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Resize handle (SE)
+    const hx = cx + ringR * Math.cos(Math.PI / 4);
+    const hy = cy + ringR * Math.sin(Math.PI / 4);
+    const hs = Math.max(10, 12 / state.zoom);
+    ctx.fillStyle = '#ff7a1a';
+    ctx.fillRect(hx - hs/2, hy - hs/2, hs, hs);
+    ctx.fillStyle = '#0b0d0e';
+    ctx.fillRect(hx - hs/4, hy - hs/4, hs/2, hs/2);
+    ctx.restore();
+  }
+
+  function stampHandlePos(st) {
+    const radius = stampRadius(st);
+    const ringPad = Math.max(4, radius * 0.15);
+    const ringR = radius + ringPad;
+    return {
+      x: st.x + ringR * Math.cos(Math.PI / 4),
+      y: st.y + ringR * Math.sin(Math.PI / 4),
+    };
+  }
+
+  // --- VIEWPORT ---
+  function applyTransform() {
+    el('zoomLevel').textContent = Math.round(state.zoom * 100) + '%';
+    renderBackground();
+    renderDraw();
+  }
+
+  function zoomAt(clientX, clientY, factor) {
+    const rect = viewport.getBoundingClientRect();
+    const mx = clientX - rect.left;
+    const my = clientY - rect.top;
+    const wx = (mx - state.panX) / state.zoom;
+    const wy = (my - state.panY) / state.zoom;
+    const newZoom = Math.max(0.1, Math.min(8, state.zoom * factor));
+    state.zoom = newZoom;
+    state.panX = mx - wx * newZoom;
+    state.panY = my - wy * newZoom;
+    applyTransform();
+  }
+
+  function fitToScreen() {
+    const rect = viewport.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const pad = 40;
+    const sx = (rect.width - pad) / state.canvasW;
+    const sy = (rect.height - pad) / state.canvasH;
+    state.zoom = Math.min(sx, sy, 2);
+    state.panX = (rect.width - state.canvasW * state.zoom) / 2;
+    state.panY = (rect.height - state.canvasH * state.zoom) / 2;
+    applyTransform();
+  }
+
+  function zoom100() {
+    const rect = viewport.getBoundingClientRect();
+    state.zoom = 1;
+    state.panX = (rect.width - state.canvasW) / 2;
+    state.panY = (rect.height - state.canvasH) / 2;
+    applyTransform();
+  }
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zoomAt(e.clientX, e.clientY, factor);
+  }, { passive: false });
+
+  el('btnZoomIn').addEventListener('click', () => {
+    const r = viewport.getBoundingClientRect();
+    zoomAt(r.left + r.width/2, r.top + r.height/2, 1.25);
+  });
+  el('btnZoomOut').addEventListener('click', () => {
+    const r = viewport.getBoundingClientRect();
+    zoomAt(r.left + r.width/2, r.top + r.height/2, 1/1.25);
+  });
+  el('btnZoomFit').addEventListener('click', fitToScreen);
+  el('btnZoom100').addEventListener('click', zoom100);
+
+  // --- DRAWING INPUT ---
+  let drawing = false;
+  let currentStroke = null;
+
+  function canvasCoords(e) {
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    return {
+      x: (mx - state.panX) / state.zoom,
+      y: (my - state.panY) / state.zoom,
+    };
+  }
+
+  viewport.addEventListener('mousedown', (e) => {
+    if (state.tool === 'pan' || state.spaceDown || e.button === 1) {
+      state.panning = true;
+      state.panStart = { x: e.clientX - state.panX, y: e.clientY - state.panY };
+      viewport.classList.add('panning');
+      e.preventDefault();
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const p = canvasCoords(e);
+    const frame = state.frames[state.currentFrame];
+
+    if (state.tool === 'select') {
+      // 1. If we have a selected stamp, check the resize handle first
+      if (state.selection && state.selection.type === 'stamp') {
+        const st = frame.stamps[state.selection.index];
+        if (st) {
+          const h = stampHandlePos(st);
+          const hs = Math.max(10, 12 / state.zoom);
+          if (Math.abs(p.x - h.x) < hs * 1.2 && Math.abs(p.y - h.y) < hs * 1.2) {
+            state.dragging = {
+              mode: 'resize', startX: p.x, startY: p.y,
+              origSize: st.size || 1.0,
+              origDist: Math.hypot(p.x - st.x, p.y - st.y),
+            };
+            pushHistory();
+            return;
+          }
+        }
+      }
+
+      // If we have a multi-selection, check whether the click is on any of its members
+      // — if so, start a group drag instead of replacing the selection.
+      if (state.selection && state.selection.type === 'multi') {
+        const stampHit = hitTestStamp(p);
+        const textHit = hitTestText(p);
+        const strokeHit = hitTestStroke(p);
+        const inSelection =
+          (stampHit !== -1 && state.selection.stampIdxs?.includes(stampHit)) ||
+          (textHit !== -1 && state.selection.textIdxs?.includes(textHit)) ||
+          (strokeHit !== -1 && state.selection.strokeIdxs?.includes(strokeHit));
+        if (inSelection) {
+          // Snapshot original positions of every member so we can move them as a group
+          const stampOrigs = (state.selection.stampIdxs || []).map(i => ({
+            i, x: frame.stamps[i].x, y: frame.stamps[i].y
+          }));
+          const textOrigs = (state.selection.textIdxs || []).map(i => ({
+            i, x: frame.texts[i].x, y: frame.texts[i].y
+          }));
+          const strokeOrigs = (state.selection.strokeIdxs || []).map(i => {
+            const s = frame.strokes[i];
+            if (s.type === 'freehand') {
+              return { i, kind: 'freehand', points: s.points.map(pt => ({ x: pt.x, y: pt.y })) };
+            }
+            return { i, kind: 'segment', x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 };
+          });
+          state.dragging = {
+            mode: 'move-multi',
+            startX: p.x, startY: p.y,
+            stampOrigs, textOrigs, strokeOrigs,
+          };
+          pushHistory();
+          return;
+        }
+        // Click outside the multi-selection → fall through to replace selection
+      }
+
+      // 2. Click on a stamp?
+      const stampHit = hitTestStamp(p);
+      if (stampHit !== -1) {
+        state.selection = { type: 'stamp', index: stampHit };
+        state.dragging = {
+          mode: 'move',
+          offsetX: p.x - frame.stamps[stampHit].x,
+          offsetY: p.y - frame.stamps[stampHit].y,
+        };
+        pushHistory();
+        updateSelectionUI();
+        renderDraw();
+        return;
+      }
+      // 3. Click on text?
+      const textHit = hitTestText(p);
+      if (textHit !== -1) {
+        state.selection = { type: 'text', index: textHit };
+        state.dragging = {
+          mode: 'move',
+          offsetX: p.x - frame.texts[textHit].x,
+          offsetY: p.y - frame.texts[textHit].y,
+        };
+        pushHistory();
+        updateSelectionUI();
+        renderDraw();
+        return;
+      }
+      // 4. Click on a stroke (arrow, line, freehand)?
+      const strokeHit = hitTestStroke(p);
+      if (strokeHit !== -1) {
+        state.selection = { type: 'stroke', index: strokeHit };
+        const s = frame.strokes[strokeHit];
+        if (s.type === 'freehand') {
+          state.dragging = {
+            mode: 'move-freehand',
+            offsets: s.points.map(pt => ({ dx: p.x - pt.x, dy: p.y - pt.y })),
+          };
+        } else {
+          state.dragging = {
+            mode: 'move-stroke',
+            offsetX1: p.x - s.x1, offsetY1: p.y - s.y1,
+            offsetX2: p.x - s.x2, offsetY2: p.y - s.y2,
+          };
+        }
+        pushHistory();
+        updateSelectionUI();
+        renderDraw();
+        return;
+      }
+      // 5. Start marquee on empty space
+      state.selection = null;
+      state.marquee = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      updateSelectionUI();
+      renderDraw();
+      return;
+    }
+
+    if (state.tool === 'draw') {
+      pushHistory();
+      drawing = true;
+      currentStroke = { type: 'freehand', color: state.color, width: state.strokeWidth, points: [p] };
+      frame.strokes.push(currentStroke);
+    } else if (state.tool === 'arrow' || state.tool === 'line') {
+      pushHistory();
+      drawing = true;
+      currentStroke = { type: state.tool, color: state.color, width: state.strokeWidth, x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      frame.strokes.push(currentStroke);
+    } else if (state.tool === 'stamp' && state.activeStamp) {
+      pushHistory();
+      frame.stamps.push({ type: state.activeStamp, x: p.x, y: p.y, size: state.stampSize });
+      renderDraw();
+    } else if (state.tool === 'text') {
+      showTextInput(p, e.clientX, e.clientY);
+    } else if (state.tool === 'erase') {
+      pushHistory();
+      eraseAt(p);
+      renderDraw();
+    }
+  });
+
+  function hitTestStamp(p) {
+    const frame = state.frames[state.currentFrame];
+    // iterate top-down so top-most is picked first
+    for (let i = frame.stamps.length - 1; i >= 0; i--) {
+      const st = frame.stamps[i];
+      if (Math.hypot(st.x - p.x, st.y - p.y) <= stampRadius(st)) return i;
+    }
+    return -1;
+  }
+
+  function hitTestText(p) {
+    const frame = state.frames[state.currentFrame];
+    // Measure requires the context, so use dctx
+    for (let i = frame.texts.length - 1; i >= 0; i--) {
+      const t = frame.texts[i];
+      dctx.font = `bold ${t.size}px 'JetBrains Mono', monospace`;
+      const w = dctx.measureText(t.text).width;
+      if (p.x >= t.x - 4 && p.x <= t.x + w + 4 && p.y >= t.y - 4 && p.y <= t.y + t.size + 4) return i;
+    }
+    return -1;
+  }
+
+  function hitTestStroke(p) {
+    const frame = state.frames[state.currentFrame];
+    for (let i = frame.strokes.length - 1; i >= 0; i--) {
+      const s = frame.strokes[i];
+      const tolerance = Math.max(s.width / 2 + 4, 8 / state.zoom);
+      if (s.type === 'freehand') {
+        for (let k = 1; k < s.points.length; k++) {
+          if (distToSeg(p, s.points[k-1], s.points[k]) <= tolerance) return i;
+        }
+      } else {
+        if (distToSeg(p, {x: s.x1, y: s.y1}, {x: s.x2, y: s.y2}) <= tolerance) return i;
+      }
+    }
+    return -1;
+  }
+
+  window.addEventListener('mousemove', (e) => {
+    if (state.panning) {
+      state.panX = e.clientX - state.panStart.x;
+      state.panY = e.clientY - state.panStart.y;
+      applyTransform();
+      return;
+    }
+    const p = canvasCoords(e);
+
+    // Dragging a selected item
+    if (state.dragging && state.selection) {
+      const frame = state.frames[state.currentFrame];
+      if (state.dragging.mode === 'move') {
+        if (state.selection.type === 'stamp') {
+          const st = frame.stamps[state.selection.index];
+          st.x = p.x - state.dragging.offsetX;
+          st.y = p.y - state.dragging.offsetY;
+        } else if (state.selection.type === 'text') {
+          const t = frame.texts[state.selection.index];
+          t.x = p.x - state.dragging.offsetX;
+          t.y = p.y - state.dragging.offsetY;
+        }
+      } else if (state.dragging.mode === 'move-stroke' && state.selection.type === 'stroke') {
+        const s = frame.strokes[state.selection.index];
+        s.x1 = p.x - state.dragging.offsetX1;
+        s.y1 = p.y - state.dragging.offsetY1;
+        s.x2 = p.x - state.dragging.offsetX2;
+        s.y2 = p.y - state.dragging.offsetY2;
+      } else if (state.dragging.mode === 'move-freehand' && state.selection.type === 'stroke') {
+        const s = frame.strokes[state.selection.index];
+        for (let i = 0; i < s.points.length; i++) {
+          s.points[i].x = p.x - state.dragging.offsets[i].dx;
+          s.points[i].y = p.y - state.dragging.offsets[i].dy;
+        }
+      } else if (state.dragging.mode === 'move-multi' && state.selection.type === 'multi') {
+        const dx = p.x - state.dragging.startX;
+        const dy = p.y - state.dragging.startY;
+        for (const o of state.dragging.stampOrigs) {
+          frame.stamps[o.i].x = o.x + dx;
+          frame.stamps[o.i].y = o.y + dy;
+        }
+        for (const o of state.dragging.textOrigs) {
+          frame.texts[o.i].x = o.x + dx;
+          frame.texts[o.i].y = o.y + dy;
+        }
+        for (const o of state.dragging.strokeOrigs) {
+          const s = frame.strokes[o.i];
+          if (o.kind === 'freehand') {
+            for (let k = 0; k < s.points.length; k++) {
+              s.points[k].x = o.points[k].x + dx;
+              s.points[k].y = o.points[k].y + dy;
+            }
+          } else {
+            s.x1 = o.x1 + dx; s.y1 = o.y1 + dy;
+            s.x2 = o.x2 + dx; s.y2 = o.y2 + dy;
+          }
+        }
+      } else if (state.dragging.mode === 'resize' && state.selection.type === 'stamp') {
+        const st = frame.stamps[state.selection.index];
+        const newDist = Math.hypot(p.x - st.x, p.y - st.y);
+        const ratio = newDist / state.dragging.origDist;
+        st.size = Math.max(0.1, Math.min(5, state.dragging.origSize * ratio));
+        updateSelectionUI();
+      }
+      renderDraw();
+      return;
+    }
+
+    // Marquee
+    if (state.marquee) {
+      state.marquee.x2 = p.x;
+      state.marquee.y2 = p.y;
+      renderDraw();
+      return;
+    }
+
+    if (!drawing) return;
+    if (currentStroke.type === 'freehand') currentStroke.points.push(p);
+    else { currentStroke.x2 = p.x; currentStroke.y2 = p.y; }
+    renderDraw();
+  });
+
+  window.addEventListener('mouseup', () => {
+    drawing = false;
+    currentStroke = null;
+    state.dragging = null;
+    if (state.panning) {
+      state.panning = false;
+      viewport.classList.remove('panning');
+    }
+    // Finalize marquee selection
+    if (state.marquee) {
+      const { x1, y1, x2, y2 } = state.marquee;
+      const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+      const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+      state.marquee = null;
+      // Only treat as marquee if the box is meaningful (> a few px)
+      if (maxX - minX > 4 && maxY - minY > 4) {
+        const frame = state.frames[state.currentFrame];
+        const stampIdxs = [];
+        const textIdxs = [];
+        const strokeIdxs = [];
+        frame.stamps.forEach((st, i) => {
+          if (st.x >= minX && st.x <= maxX && st.y >= minY && st.y <= maxY) stampIdxs.push(i);
+        });
+        frame.texts.forEach((t, i) => {
+          if (t.x >= minX && t.x <= maxX && t.y >= minY && t.y <= maxY) textIdxs.push(i);
+        });
+        frame.strokes.forEach((s, i) => {
+          // For lines/arrows, both endpoints must be inside; for freehand, all points
+          if (s.type === 'freehand') {
+            if (s.points.every(pt => pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY)) {
+              strokeIdxs.push(i);
+            }
+          } else {
+            if (s.x1 >= minX && s.x1 <= maxX && s.y1 >= minY && s.y1 <= maxY
+             && s.x2 >= minX && s.x2 <= maxX && s.y2 >= minY && s.y2 <= maxY) {
+              strokeIdxs.push(i);
+            }
+          }
+        });
+        if (stampIdxs.length + textIdxs.length + strokeIdxs.length > 0) {
+          state.selection = { type: 'multi', stampIdxs, textIdxs, strokeIdxs };
+        } else {
+          state.selection = null;
+        }
+        updateSelectionUI();
+      }
+      renderDraw();
+    }
+  });
+
+  function eraseAt(p) {
+    const frame = state.frames[state.currentFrame];
+    const R = Math.max(24, state.canvasW * 0.018);
+    frame.stamps = frame.stamps.filter(s => Math.hypot(s.x - p.x, s.y - p.y) > R);
+    frame.texts = frame.texts.filter(t => !(p.x >= t.x - 5 && p.x <= t.x + 300 && p.y >= t.y - 5 && p.y <= t.y + t.size + 5));
+    frame.strokes = frame.strokes.filter(s => {
+      if (s.type === 'freehand') return !s.points.some(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < R);
+      return distToSeg(p, {x: s.x1, y: s.y1}, {x: s.x2, y: s.y2}) > R;
+    });
+  }
+  function distToSeg(p, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx*dx + dy*dy;
+    if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (a.x + t*dx), p.y - (a.y + t*dy));
+  }
+
+  // --- INLINE TEXT INPUT ---
+  function showTextInput(worldPt, clientX, clientY) {
+    // Remove any existing input first
+    const existing = document.getElementById('floatingTextInput');
+    if (existing) existing.remove();
+
+    const size = Math.max(14, Math.round(state.canvasW * 0.012));
+    const displaySize = size * state.zoom;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'floatingTextInput';
+    input.placeholder = 'TYPE, THEN ENTER';
+    input.style.cssText = `
+      position: fixed;
+      left: ${clientX}px;
+      top: ${clientY}px;
+      background: rgba(11, 13, 14, 0.95);
+      border: 1px solid ${state.color};
+      color: ${state.color};
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: bold;
+      font-size: ${Math.max(12, displaySize)}px;
+      padding: 4px 8px;
+      outline: none;
+      z-index: 1000;
+      min-width: 200px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+    `;
+    document.body.appendChild(input);
+    // Focus on next tick to avoid the mousedown stealing focus
+    requestAnimationFrame(() => input.focus());
+
+    const commit = () => {
+      const text = input.value.trim();
+      input.remove();
+      if (text) {
+        pushHistory();
+        state.frames[state.currentFrame].texts.push({
+          text, x: worldPt.x, y: worldPt.y,
+          color: state.color, size,
+        });
+        renderDraw();
+      }
+    };
+    const cancel = () => { input.remove(); };
+
+    input.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+    });
+    input.addEventListener('blur', commit);
+  }
+
+  // --- HISTORY ---
+  function pushHistory() {
+    state.history.push(JSON.stringify(state.frames));
+    if (state.history.length > 50) state.history.shift();
+    state.redoStack = [];
+  }
+  function undo() {
+    if (!state.history.length) return;
+    state.redoStack.push(JSON.stringify(state.frames));
+    state.frames = JSON.parse(state.history.pop());
+    if (state.currentFrame >= state.frames.length) state.currentFrame = state.frames.length - 1;
+    renderAll();
+  }
+  function redo() {
+    if (!state.redoStack.length) return;
+    state.history.push(JSON.stringify(state.frames));
+    state.frames = JSON.parse(state.redoStack.pop());
+    renderAll();
+  }
+
+  // --- UI WIRING ---
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tool = btn.dataset.tool;
+      if (tool === 'clear') {
+        if (confirm('Clear all annotations on current frame?')) {
+          pushHistory();
+          const f = state.frames[state.currentFrame];
+          f.strokes = []; f.stamps = []; f.texts = [];
+          renderDraw();
+        }
+        return;
+      }
+      state.tool = tool;
+      if (tool !== 'select') {
+        state.selection = null;
+        updateSelectionUI();
+        renderDraw();
+      }
+      document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      viewport.classList.toggle('pan-mode', tool === 'pan');
+      syncSizeSliderToTool();
+    });
+  });
+
+  document.querySelectorAll('.color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      state.color = sw.dataset.color;
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.stroke-btn').forEach(sb => {
+    sb.addEventListener('click', () => {
+      state.strokeWidth = parseInt(sb.dataset.width);
+      document.querySelectorAll('.stroke-btn').forEach(s => s.classList.remove('active'));
+      sb.classList.add('active');
+      syncSizeSliderToTool();
+    });
+  });
+
+  document.querySelectorAll('.stamp-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.activeStamp = btn.dataset.stamp;
+      state.tool = 'stamp';
+      document.querySelectorAll('.stamp-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+      document.querySelector('.tool-btn[data-tool="stamp"]').classList.add('active');
+      syncSizeSliderToTool();
+    });
+  });
+
+  function loadBuiltinMap(key) {
+    const url = BUILTIN_MAPS[key];
+    if (!url) return;
+    el('mapInfo').textContent = `Loading ${key.toUpperCase().replace('_',' ')}…`;
+    const img = new Image();
+    img.onload = () => {
+      state.bgImage = url;
+      bgImgObj = img;
+      resizeCanvas(img.naturalWidth, img.naturalHeight);
+      el('mapInfo').textContent = `${key.toUpperCase().replace('_',' ')} · ${img.naturalWidth}×${img.naturalHeight} (built-in)`;
+      renderAll();
+      fitToScreen();
+    };
+    img.onerror = () => {
+      el('mapInfo').textContent = `Failed to load ${url}. Make sure the file is in the same folder as this page.`;
+    };
+    img.src = url;
+  }
+
+  el('mapSelect').addEventListener('change', (e) => {
+    state.map = e.target.value;
+    el('metaMap').textContent = e.target.options[e.target.selectedIndex].text;
+    if (BUILTIN_MAPS[state.map]) {
+      loadBuiltinMap(state.map);
+    } else if (state.map === 'custom') {
+      // Clear the background so the user can upload their own
+      state.bgImage = null;
+      bgImgObj = null;
+      resizeCanvas(DEFAULT_W, DEFAULT_H);
+      el('mapInfo').textContent = 'No background loaded.';
+      renderAll();
+      fitToScreen();
+    }
+  });
+
+  el('runName').addEventListener('input', (e) => { state.runName = e.target.value; });
+
+  el('mapUpload').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        state.bgImage = reader.result;
+        bgImgObj = img;
+        resizeCanvas(img.naturalWidth, img.naturalHeight);
+        el('mapInfo').textContent = `${file.name} · ${img.naturalWidth}×${img.naturalHeight}`;
+        fitToScreen();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  el('btnUndo').addEventListener('click', undo);
+  el('btnRedo').addEventListener('click', redo);
+
+  // --- Universal size slider: adapts to current tool ---
+  function syncSizeSliderToTool() {
+    const slider = el('stampSize');
+    const label = el('stampSizeVal');
+    if (state.tool === 'draw' || state.tool === 'arrow' || state.tool === 'line') {
+      slider.min = '1'; slider.max = '40'; slider.step = '1';
+      slider.value = state.strokeWidth;
+      label.textContent = state.strokeWidth + 'px';
+    } else {
+      slider.min = '0.1'; slider.max = '3'; slider.step = '0.1';
+      slider.value = state.stampSize;
+      label.textContent = state.stampSize.toFixed(1) + '×';
+    }
+  }
+
+  el('stampSize').addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    if (state.tool === 'draw' || state.tool === 'arrow' || state.tool === 'line') {
+      state.strokeWidth = v;
+      el('stampSizeVal').textContent = v + 'px';
+      // Also reflect in the STROKE button row
+      document.querySelectorAll('.stroke-btn').forEach(b => b.classList.remove('active'));
+      const match = document.querySelector(`.stroke-btn[data-width="${v}"]`);
+      if (match) match.classList.add('active');
+    } else {
+      state.stampSize = v;
+      el('stampSizeVal').textContent = v.toFixed(1) + '×';
+    }
+  });
+
+  // --- Selection panel wiring ---
+  function updateSelectionUI() {
+    const panel = el('selPanel');
+    const info = el('selInfo');
+    if (!state.selection) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = 'block';
+    const frame = state.frames[state.currentFrame];
+    const sizeSlider = el('selSize');
+    const sizeLabel = el('selSizeVal');
+    const sizeRow = sizeSlider.parentElement;
+    if (state.selection.type === 'stamp') {
+      const st = frame.stamps[state.selection.index];
+      if (!st) { state.selection = null; panel.style.display = 'none'; return; }
+      const def = STAMP_DEFS[st.type];
+      info.textContent = `STAMP: ${def.label}`;
+      sizeRow.style.display = '';
+      sizeRow.firstElementChild.textContent = 'SIZE';
+      sizeSlider.min = '0.1'; sizeSlider.max = '3'; sizeSlider.step = '0.1';
+      sizeSlider.value = st.size || 1.0;
+      sizeLabel.textContent = (st.size || 1.0).toFixed(1) + '×';
+    } else if (state.selection.type === 'stroke') {
+      const s = frame.strokes[state.selection.index];
+      if (!s) { state.selection = null; panel.style.display = 'none'; return; }
+      const kind = s.type === 'arrow' ? 'ARROW' : s.type === 'line' ? 'LINE' : 'DRAWING';
+      info.textContent = kind;
+      sizeRow.style.display = '';
+      sizeRow.firstElementChild.textContent = 'WIDTH';
+      sizeSlider.min = '1'; sizeSlider.max = '40'; sizeSlider.step = '1';
+      sizeSlider.value = s.width;
+      sizeLabel.textContent = s.width + 'px';
+    } else if (state.selection.type === 'text') {
+      const t = frame.texts[state.selection.index];
+      if (!t) { state.selection = null; panel.style.display = 'none'; return; }
+      info.textContent = `TEXT: "${t.text.slice(0, 18)}${t.text.length > 18 ? '…' : ''}"`;
+      sizeRow.style.display = 'none';
+    } else if (state.selection.type === 'multi') {
+      const n = (state.selection.stampIdxs?.length || 0)
+              + (state.selection.textIdxs?.length || 0)
+              + (state.selection.strokeIdxs?.length || 0);
+      info.textContent = `MULTI: ${n} ITEM${n !== 1 ? 'S' : ''}`;
+      sizeRow.style.display = 'none';
+    }
+  }
+
+  el('selSize').addEventListener('input', (e) => {
+    if (!state.selection) return;
+    const frame = state.frames[state.currentFrame];
+    const v = parseFloat(e.target.value);
+    if (state.selection.type === 'stamp') {
+      const st = frame.stamps[state.selection.index];
+      if (!st) return;
+      st.size = v;
+      el('selSizeVal').textContent = v.toFixed(1) + '×';
+    } else if (state.selection.type === 'stroke') {
+      const s = frame.strokes[state.selection.index];
+      if (!s) return;
+      s.width = v;
+      el('selSizeVal').textContent = v + 'px';
+    }
+    renderDraw();
+  });
+  el('selSize').addEventListener('change', () => pushHistory());
+
+  el('selColorRow').querySelectorAll('.color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      if (!state.selection) return;
+      pushHistory();
+      const c = sw.dataset.color;
+      const frame = state.frames[state.currentFrame];
+      const applyColor = (idx, kind) => {
+        if (kind === 'stamp') frame.stamps[idx].color = c;
+        else if (kind === 'text') frame.texts[idx].color = c;
+        else if (kind === 'stroke') frame.strokes[idx].color = c;
+      };
+      if (state.selection.type === 'stamp') applyColor(state.selection.index, 'stamp');
+      else if (state.selection.type === 'text') applyColor(state.selection.index, 'text');
+      else if (state.selection.type === 'stroke') applyColor(state.selection.index, 'stroke');
+      else if (state.selection.type === 'multi') {
+        (state.selection.stampIdxs  || []).forEach(i => applyColor(i, 'stamp'));
+        (state.selection.textIdxs   || []).forEach(i => applyColor(i, 'text'));
+        (state.selection.strokeIdxs || []).forEach(i => applyColor(i, 'stroke'));
+      }
+      renderDraw();
+    });
+  });
+
+  function deleteSelection() {
+    if (!state.selection) return;
+    pushHistory();
+    const frame = state.frames[state.currentFrame];
+    if (state.selection.type === 'stamp') {
+      frame.stamps.splice(state.selection.index, 1);
+    } else if (state.selection.type === 'text') {
+      frame.texts.splice(state.selection.index, 1);
+    } else if (state.selection.type === 'stroke') {
+      frame.strokes.splice(state.selection.index, 1);
+    } else if (state.selection.type === 'multi') {
+      // remove from highest index first to keep indices stable
+      (state.selection.stampIdxs  || []).sort((a,b) => b-a).forEach(i => frame.stamps.splice(i, 1));
+      (state.selection.textIdxs   || []).sort((a,b) => b-a).forEach(i => frame.texts.splice(i, 1));
+      (state.selection.strokeIdxs || []).sort((a,b) => b-a).forEach(i => frame.strokes.splice(i, 1));
+    }
+    state.selection = null;
+    updateSelectionUI();
+    renderDraw();
+  }
+
+  el('btnDeleteSel').addEventListener('click', deleteSelection);
+  el('btnDeselect').addEventListener('click', () => {
+    state.selection = null;
+    updateSelectionUI();
+    renderDraw();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    const typing = ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+    if (typing) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (state.selection) { e.preventDefault(); deleteSelection(); return; }
+    }
+    if (e.key === 'Escape') {
+      if (state.selection) { state.selection = null; updateSelectionUI(); renderDraw(); return; }
+    }
+    if (e.code === 'Space' && !state.spaceDown) {
+      state.spaceDown = true;
+      viewport.classList.add('pan-mode');
+      e.preventDefault();
+    }
+    if (e.key === '0') fitToScreen();
+    if (e.key === '1') zoom100();
+    if (e.key === '+' || e.key === '=') {
+      const r = viewport.getBoundingClientRect();
+      zoomAt(r.left + r.width/2, r.top + r.height/2, 1.25);
+    }
+    if (e.key === '-' || e.key === '_') {
+      const r = viewport.getBoundingClientRect();
+      zoomAt(r.left + r.width/2, r.top + r.height/2, 1/1.25);
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+      state.spaceDown = false;
+      if (state.tool !== 'pan') viewport.classList.remove('pan-mode');
+    }
+  });
+
+  // --- FRAMES ---
+  function renderFrames() {
+    const list = el('frameList');
+    list.innerHTML = '';
+    state.frames.forEach((f, i) => {
+      const chip = document.createElement('button');
+      chip.className = 'frame-chip' + (i === state.currentFrame ? ' active' : '');
+      chip.innerHTML = `<div class="num">T${i}</div><div class="lbl">${(f.stamps.length + f.strokes.length)} mk</div>`;
+      chip.addEventListener('click', () => { state.currentFrame = i; renderAll(); });
+      list.appendChild(chip);
+    });
+    el('metaFrames').textContent = state.frames.length;
+    el('metaCurrent').textContent = 'T' + state.currentFrame;
+  }
+
+  el('btnAddFrame').addEventListener('click', () => {
+    pushHistory();
+    state.frames.push({ label: 'T' + state.frames.length, strokes: [], stamps: [], texts: [] });
+    state.currentFrame = state.frames.length - 1;
+    renderAll();
+  });
+
+  el('btnDupFrame').addEventListener('click', () => {
+    pushHistory();
+    const copy = JSON.parse(JSON.stringify(state.frames[state.currentFrame]));
+    state.frames.splice(state.currentFrame + 1, 0, copy);
+    state.currentFrame++;
+    renderAll();
+  });
+
+  el('btnDelFrame').addEventListener('click', () => {
+    if (state.frames.length <= 1) { alert('Need at least one frame.'); return; }
+    pushHistory();
+    state.frames.splice(state.currentFrame, 1);
+    if (state.currentFrame >= state.frames.length) state.currentFrame = state.frames.length - 1;
+    renderAll();
+  });
+
+  // --- SAVE / LOAD / EXPORT ---
+  const LS_KEY = 'marathon_tac_runs_v1';
+  const getSaved = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } };
+  const setSaved = (arr) => localStorage.setItem(LS_KEY, JSON.stringify(arr));
+
+  function renderSavedList() {
+    const saved = getSaved();
+    const container = el('savedList');
+    if (!saved.length) { container.innerHTML = '<div class="hint">No saved runs yet.</div>'; return; }
+    container.innerHTML = '';
+    saved.slice().reverse().forEach((r) => {
+      const div = document.createElement('div');
+      div.className = 'run-item';
+      const d = new Date(r.savedAt);
+      div.innerHTML = `
+        <div class="rn">${escapeHtml(r.runName || 'Untitled')}</div>
+        <div class="rm">${r.map.toUpperCase().replace('_', ' ')} · ${r.frames.length} FRAME${r.frames.length>1?'S':''}</div>
+        <div class="rd">${d.toLocaleString()}</div>
+        <div class="run-item-actions">
+          <button data-id="${r.id}" class="load">LOAD</button>
+          <button data-id="${r.id}" class="del">DELETE</button>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+    container.querySelectorAll('.load').forEach(b => {
+      b.addEventListener('click', (e) => { e.stopPropagation(); loadRun(b.dataset.id); });
+    });
+    container.querySelectorAll('.del').forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm('Delete this run?')) {
+          setSaved(getSaved().filter(r => r.id !== b.dataset.id));
+          renderSavedList();
+        }
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  function saveRun() {
+    const saved = getSaved();
+    const id = 'run_' + Date.now();
+    saved.push({
+      id,
+      runName: state.runName || 'Untitled',
+      map: state.map,
+      bgImage: state.bgImage,
+      canvasW: state.canvasW,
+      canvasH: state.canvasH,
+      frames: state.frames,
+      savedAt: Date.now(),
+    });
+    while (saved.length > 30) saved.shift();
+    try { setSaved(saved); flashStatus('SAVED'); renderSavedList(); }
+    catch { alert('Save failed — localStorage likely full. Delete old runs or export instead.'); }
+  }
+
+  function loadRun(id) {
+    const run = getSaved().find(r => r.id === id);
+    if (!run) return;
+    state.runName = run.runName;
+    state.map = run.map;
+    state.bgImage = run.bgImage;
+    state.frames = run.frames;
+    state.currentFrame = 0;
+    state.selection = null;
+    el('runName').value = state.runName;
+    el('mapSelect').value = state.map;
+    el('metaMap').textContent = state.map.toUpperCase().replace('_', ' ');
+    el('mapInfo').textContent = state.bgImage ? 'Background loaded.' : 'No background loaded.';
+    resizeCanvas(run.canvasW || DEFAULT_W, run.canvasH || DEFAULT_H);
+    if (state.bgImage) {
+      const img = new Image();
+      img.onload = () => {
+        bgImgObj = img;
+        renderAll();
+        fitToScreen();
+      };
+      img.src = state.bgImage;
+    } else {
+      bgImgObj = null;
+      renderAll();
+      fitToScreen();
+    }
+    updateSelectionUI();
+    flashStatus('LOADED');
+  }
+
+  function newRun() {
+    if (!confirm('Start a new run? Unsaved work will be lost.')) return;
+    state.runName = '';
+    state.bgImage = null;
+    bgImgObj = null;
+    state.frames = [{ label: 'T0', strokes: [], stamps: [], texts: [] }];
+    state.currentFrame = 0;
+    state.selection = null;
+    state.history = [];
+    state.redoStack = [];
+    el('runName').value = '';
+    el('mapInfo').textContent = 'No background loaded.';
+    resizeCanvas(DEFAULT_W, DEFAULT_H);
+    updateSelectionUI();
+    fitToScreen();
+    flashStatus('NEW RUN');
+  }
+
+  function flashStatus(text) {
+    el('statusText').textContent = text;
+    setTimeout(() => { el('statusText').textContent = 'READY'; }, 1600);
+  }
+
+  el('btnSave').addEventListener('click', saveRun);
+  el('btnNew').addEventListener('click', newRun);
+
+  // Render any frame index to an offscreen full-resolution canvas
+  function renderFrameToCanvas(frameIdx) {
+    const out = document.createElement('canvas');
+    out.width = state.canvasW;
+    out.height = state.canvasH;
+    const octx = out.getContext('2d');
+
+    if (bgImgObj) {
+      octx.drawImage(bgImgObj, 0, 0, state.canvasW, state.canvasH);
+    } else {
+      octx.fillStyle = '#0b0d0e';
+      octx.fillRect(0, 0, state.canvasW, state.canvasH);
+      octx.strokeStyle = 'rgba(255,122,26,0.06)';
+      octx.lineWidth = 1;
+      for (let x = 0; x < state.canvasW; x += 40) { octx.beginPath(); octx.moveTo(x, 0); octx.lineTo(x, state.canvasH); octx.stroke(); }
+      for (let y = 0; y < state.canvasH; y += 40) { octx.beginPath(); octx.moveTo(0, y); octx.lineTo(state.canvasW, y); octx.stroke(); }
+    }
+
+    const frame = state.frames[frameIdx];
+    for (const s of frame.strokes) {
+      octx.strokeStyle = s.color;
+      octx.lineWidth = s.width;
+      octx.lineCap = 'round';
+      octx.lineJoin = 'round';
+      if (s.type === 'freehand') {
+        if (s.points.length < 2) continue;
+        octx.beginPath();
+        octx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) octx.lineTo(s.points[i].x, s.points[i].y);
+        octx.stroke();
+      } else {
+        if (s.type === 'arrow') {
+          const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+          const headLen = Math.max(12, s.width * 3);
+          const cut = headLen * 0.85;
+          const endX = s.x2 - cut * Math.cos(angle);
+          const endY = s.y2 - cut * Math.sin(angle);
+          octx.beginPath();
+          octx.moveTo(s.x1, s.y1); octx.lineTo(endX, endY); octx.stroke();
+          drawArrowHead(octx, s.x1, s.y1, s.x2, s.y2, s.width, s.color);
+        } else {
+          octx.beginPath();
+          octx.moveTo(s.x1, s.y1); octx.lineTo(s.x2, s.y2); octx.stroke();
+        }
+      }
+    }
+    for (const st of frame.stamps) drawStamp(octx, st, false);
+    for (const t of frame.texts) {
+      octx.fillStyle = t.color;
+      octx.font = `bold ${t.size}px 'JetBrains Mono', monospace`;
+      octx.textBaseline = 'top';
+      octx.fillText(t.text, t.x, t.y);
+    }
+
+    // Title bar
+    const barH = Math.max(40, Math.round(state.canvasH * 0.04));
+    octx.fillStyle = 'rgba(0,0,0,0.82)';
+    octx.fillRect(0, 0, state.canvasW, barH);
+    const fs = Math.max(14, Math.round(barH * 0.42));
+    octx.fillStyle = '#ff7a1a';
+    octx.font = `bold ${fs}px 'JetBrains Mono', monospace`;
+    octx.textBaseline = 'middle';
+    octx.fillText('▲ TAC BOARD', 16, barH / 2);
+    octx.fillStyle = '#e8ebee';
+    octx.fillText((state.runName || 'UNTITLED RUN').toUpperCase(), 16 + fs * 11, barH / 2);
+    octx.fillStyle = '#7a838d';
+    const meta = `${state.map.toUpperCase().replace('_',' ')} · T${frameIdx} · ${new Date().toLocaleDateString()}`;
+    octx.textAlign = 'right';
+    octx.fillText(meta, state.canvasW - 16, barH / 2);
+    octx.textAlign = 'start';
+    octx.textBaseline = 'alphabetic';
+
+    return out;
+  }
+
+  el('btnExport').addEventListener('click', () => {
+    const out = renderFrameToCanvas(state.currentFrame);
+    const url = out.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    const safe = (state.runName || 'run').replace(/[^\w-]/g, '_');
+    a.download = `tacboard_${safe}_T${state.currentFrame}.png`;
+    a.click();
+    flashStatus('EXPORTED');
+  });
+
+  // Export all frames into a single ZIP
+  el('btnExportAll').addEventListener('click', async () => {
+    if (typeof JSZip === 'undefined') {
+      alert('Zip library failed to load. Make sure jszip.min.js is in the same folder as this page.');
+      return;
+    }
+    flashStatus('PACKING…');
+    const zip = new JSZip();
+    const safe = (state.runName || 'run').replace(/[^\w-]/g, '_');
+    const folder = zip.folder(`tacboard_${safe}`);
+
+    // Render each frame and add to zip
+    for (let i = 0; i < state.frames.length; i++) {
+      const canvas = renderFrameToCanvas(i);
+      // Convert to blob (more efficient than dataURL for zip)
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      const arrayBuffer = await blob.arrayBuffer();
+      const padded = String(i).padStart(2, '0');
+      folder.file(`tacboard_${safe}_T${padded}.png`, arrayBuffer);
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tacboard_${safe}_all_frames.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flashStatus(`EXPORTED ${state.frames.length} FRAMES`);
+  });
+
+  function renderAll() {
+    renderBackground();
+    renderDraw();
+    renderFrames();
+  }
+
+  // Resize canvases + redraw when the window changes
+  const resizeObs = new ResizeObserver(() => {
+    sizeCanvasesToViewport();
+    renderAll();
+  });
+  resizeObs.observe(viewport);
+  window.addEventListener('resize', () => {
+    sizeCanvasesToViewport();
+    renderAll();
+  });
+
+  // Init
+  resizeCanvas(DEFAULT_W, DEFAULT_H);
+  sizeCanvasesToViewport();
+  renderAll();
+  renderSavedList();
+  requestAnimationFrame(() => {
+    sizeCanvasesToViewport();
+    // Load the default map (matches the dropdown's initial value)
+    if (BUILTIN_MAPS[state.map]) loadBuiltinMap(state.map);
+    else fitToScreen();
+  });
+})();
+</script>
+</body>
+</html>
